@@ -35,8 +35,4 @@ Repositório centralizado de relatórios de auditoria e documentações técnica
 |----------|-----------|-----------|
 | DEV | [MongoDB Schema](docs/databases/mongodb/dev-schema.md) | Schema inferido das collections do ambiente de desenvolvimento |
 
-## Como Contribuir
-
-1. Siga as convenções de nomenclatura descritas acima
-2. Atualize este índice ao adicionar novos documentos
 
