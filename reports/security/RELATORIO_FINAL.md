@@ -37,10 +37,6 @@ A infraestrutura está concentrada na região **us-east-1** e organizada em ambi
 | `vpc-qas-env` | `vpc-03958a9f0b439716a` | `10.20.0.0/16` | Quality Assurance | ✅ | ✅ `44.209.18.174` | 2 | 4 |
 | `default` | `vpc-0650fbe4db4a34490` | `172.31.0.0/16` | VPC Padrão da AWS | ✅ | ❌ | 6 | 0 |
 
-> **Observação importante:** Os ALBs (alb-hml-mktplace, alb-qas-mktplace, alb-mktplace-prd) estão na **VPC Default** (172.31.0.0/16) e não nas VPCs de ambiente. O tráfego chega nos ALBs na VPC Default e é roteado para os Target Groups do ECS nas VPCs de ambiente.
->
-> **Atenção:** Na VPC DEV, a subnet `vpc-dev-env - Database (AZ1)` (10.10.32.0/20) possui rota para o Internet Gateway, sendo classificada como **pública**. As instâncias de banco de dados nessa subnet (MongoDB, DataCore, Qdrant) estão em subnet pública, o que agrava o risco das regras de SG abertas para 0.0.0.0/0.
-
 ### 1.2 Topologia de Rede
 
 ```mermaid
