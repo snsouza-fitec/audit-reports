@@ -486,16 +486,34 @@ graph TB
 
 ### 4.1 IPs Públicos em Instâncias EC2
 
-| Instância | IP Público | Portas Expostas ao 0.0.0.0/0 | Risco |
-|---|---|---|---|
-| BastionHost-DEV | `18.232.238.14` | SSH 22 (IPs restritos) | ✅ Adequado |
-| BastionHost-PRD | `52.4.242.172` | SSH 22 (IPs restritos) | ✅ Adequado |
-| ELK-DEV | `34.199.152.100` | 5044, 5601, 9200, 9300, 9600 | 🔴 **Elastic/Kibana público** |
-| ELK-QAS | `98.89.249.154` | 5044, 5601, 9200, 9300, 9600 | 🔴 **Elastic/Kibana público** |
-| Grafana | `3.226.96.194` | 3000 (sem source), 3100 (restrito) | 🟡 Revisar acesso 3000 |
-| Retopologia-PRD | `34.193.21.173` | 5000-5002 (0.0.0.0/0) | 🟡 API pública |
-| Retopologia-DEV (stopped) | `34.235.101.179` | 5000-5002 (0.0.0.0/0) | 🟡 API pública |
-| Reto-GPU-DEV (stopped) | `3.233.26.196` | 5000-5002 (0.0.0.0/0) | 🟡 API pública |
+| Instância | IP Público | Subnet | Portas 0.0.0.0/0 no SG | Exposição Real |
+|---|---|---|---|---|
+| BastionHost-DEV | `18.232.238.14` | Pública | SSH 22 (IPs restritos) | ✅ Adequado — IPs nominais |
+| BastionHost-PRD | `52.4.242.172` | Pública | SSH 22 (IPs restritos) | ✅ Adequado — IPs nominais |
+| ELK-DEV | `34.199.152.100` | **Pública** | 5044, 5601, 9200, 9300, 9600 | 🔴 **EXPOSTO** — Elastic/Kibana acessível da internet |
+| ELK-QAS | `98.89.249.154` | **Pública** | 5044, 5601, 9200, 9300, 9600 | 🔴 **EXPOSTO** — Elastic/Kibana acessível da internet |
+| Grafana | `3.226.96.194` | **Pública** | 3000 (sem source), 3100 (restrito) | 🟡 **EXPOSTO** — Dashboard acessível da internet |
+| Retopologia-PRD | `34.193.21.173` | **Pública** | 5000-5002 (0.0.0.0/0) | 🟡 **EXPOSTO** — API acessível da internet |
+| Retopologia-DEV | `34.235.101.179` | **Pública** | 5000-5002 (0.0.0.0/0) | 🟡 **EXPOSTO** — API acessível da internet |
+| Reto-GPU-DEV | `3.233.26.196` | **Pública** | 5000-5002 (0.0.0.0/0) | 🟡 **EXPOSTO** — API acessível da internet |
+
+#### Instâncias com SG 0.0.0.0/0 mas SEM exposição real
+
+Estas instâncias possuem regras `0.0.0.0/0` no Security Group, porém estão em **subnet privada** (sem rota para IGW) e **sem IP público**, o que impede o acesso direto da internet:
+
+| Instância | IP Privado | Subnet | Portas 0.0.0.0/0 no SG | Por que NÃO está exposta |
+|---|---|---|---|---|
+| MongoDB-DEV | `10.10.49.88` | **Privada** (Database AZ2) | SSH 22, MongoDB 27017, Redis 6379 | Sem IP público + sem rota IGW |
+| MongoDB-HML | `10.10.49.92` | **Privada** (Database AZ2) | SSH 22, MongoDB 27017, Redis 6379 | Sem IP público + sem rota IGW |
+| MongoDB-QAS | `10.10.49.91` | **Privada** (Database AZ2) | SSH 22, MongoDB 27017, Redis 6379 | Sem IP público + sem rota IGW |
+| DataCore-DEV | `10.10.58.237` | **Privada** (Database AZ2) | SSH 22, PostgreSQL 5432 | Sem IP público + sem rota IGW |
+| DataCore-QAS | `10.10.54.151` | **Privada** (Database AZ2) | SSH 22, PostgreSQL 5432 | Sem IP público + sem rota IGW |
+| Data-Qdrant-DEV | `10.10.50.82` | **Privada** (Database AZ2) | Qdrant 6333/6334 | Sem IP público + sem rota IGW |
+| Data-Qdrant-QAS | `10.10.48.47` | **Privada** (Database AZ2) | Qdrant 6333/6334 | Sem IP público + sem rota IGW |
+
+> **Caso especial — MongoDB-PRD:** Está em **subnet pública** (`subnet-0474d91c6844aae9a`) mas atualmente **sem IP público**. Não está exposto, porém se alguém atribuir um EIP ou habilitar auto-assign public IP, o MongoDB ficará instantaneamente acessível da internet pela porta 27017.
+
+> **Importante:** Mesmo sem exposição à internet, as regras 0.0.0.0/0 nos SGs devem ser corrigidas como boa prática — elas permitem acesso de **qualquer recurso dentro da VPC** e representam risco em caso de comprometimento lateral.
 
 ### 4.2 Portas Expostas via ALBs (VPC Default)
 
@@ -505,28 +523,56 @@ graph TB
 | alb-qas-mktplace | default VPC SG | 80, 443, 8000, 8001 | ECS QAS |
 | alb-hml-mktplace | default VPC SG | 80, 443, 8000, 8001 | ECS HML/DEV |
 
-### 4.3 Portas de Serviços Internos Expostas Publicamente
+### 4.3 Regras 0.0.0.0/0 em Serviços Internos (SG vs. Exposição Real)
 
-| Serviço | Porta | SG | Aberto para | Instâncias usando |
-|---|---|---|---|---|
-| MongoDB | 27017 | MongoDB-DEV | **0.0.0.0/0** 🔴 | MongoDB-DEV, MongoDB-HML, MongoDB-QAS |
-| MongoDB | 27017 | MongoDB-PRD-sg | **0.0.0.0/0** 🔴 | MongoDB-PRD |
-| MongoDB | 27017 | MongoDB-QAS | **0.0.0.0/0** 🔴 | — |
-| MongoDB | 27017 | data-core-prd-sg | **0.0.0.0/0** 🔴 | — |
-| MongoDB | 27017 | data-core-dev-sg | **0.0.0.0/0** 🔴 | DataCore-DEV, DataCore-QAS |
-| PostgreSQL | 5432 | data-core-sg | **0.0.0.0/0** 🔴 | DataCore-DEV, DataCore-QAS |
-| PostgreSQL | 5432 | data-core-prd-sg | **0.0.0.0/0** 🔴 | — |
-| PostgreSQL | 5432 | data-core-dev-sg | **0.0.0.0/0** 🔴 | DataCore-DEV, DataCore-QAS |
-| Redis | 6379 | MongoDB-DEV | **0.0.0.0/0** 🔴 | MongoDB-DEV, MongoDB-HML, MongoDB-QAS |
-| Redis | 6379 | data-core-prd-sg | **0.0.0.0/0** 🔴 | — |
-| Redis | 6379 | data-core-dev-sg | **0.0.0.0/0** 🔴 | DataCore-DEV, DataCore-QAS |
-| Elasticsearch | 9200/9300 | elk-dev-sg | **0.0.0.0/0** 🟡 | ELK-DEV, ELK-QAS |
-| Kibana | 5601 | elk-dev-sg | **0.0.0.0/0** 🟡 | ELK-DEV, ELK-QAS |
-| Qdrant | 6333/6334 | Data-Qdrant-DEV-sg | **0.0.0.0/0** 🟡 | Qdrant-DEV, Qdrant-QAS |
-| SSH | 22 | MongoDB-QAS | **0.0.0.0/0** 🔴 | — |
-| SSH | 22 | MongoDB-DEV | **0.0.0.0/0** 🔴 | MongoDB-DEV, MongoDB-HML, MongoDB-QAS |
-| SSH | 22 | data-core-sg | **0.0.0.0/0** 🔴 | DataCore-DEV, DataCore-QAS |
+A tabela abaixo mostra todas as regras `0.0.0.0/0` em SGs de serviços internos. A coluna **Exposição** indica se o tráfego da internet pode de fato chegar à instância (subnet pública + IP público).
+
+| Serviço | Porta | SG | 0.0.0.0/0 | Instâncias | Exposição Real |
+|---|---|---|---|---|---|
+| MongoDB | 27017 | MongoDB-DEV | Sim | MongoDB-DEV, HML, QAS | ✅ **NÃO** — subnet privada, sem IP público |
+| MongoDB | 27017 | MongoDB-PRD-sg | Sim | MongoDB-PRD | 🟡 **NÃO** — subnet pública mas sem IP público (risco latente) |
+| MongoDB | 27017 | MongoDB-QAS | Sim | — | ✅ **NÃO** — sem instâncias associadas |
+| MongoDB | 27017 | data-core-prd-sg | Sim | — | ✅ **NÃO** — sem instâncias associadas |
+| MongoDB | 27017 | data-core-dev-sg | Sim | DataCore-DEV, QAS | ✅ **NÃO** — subnet privada, sem IP público |
+| PostgreSQL | 5432 | data-core-sg | Sim | DataCore-DEV, QAS | ✅ **NÃO** — subnet privada, sem IP público |
+| PostgreSQL | 5432 | data-core-prd-sg | Sim | — | ✅ **NÃO** — sem instâncias associadas |
+| PostgreSQL | 5432 | data-core-dev-sg | Sim | DataCore-DEV, QAS | ✅ **NÃO** — subnet privada, sem IP público |
+| Redis | 6379 | MongoDB-DEV | Sim | MongoDB-DEV, HML, QAS | ✅ **NÃO** — subnet privada, sem IP público |
+| Redis | 6379 | data-core-prd-sg | Sim | — | ✅ **NÃO** — sem instâncias associadas |
+| Redis | 6379 | data-core-dev-sg | Sim | DataCore-DEV, QAS | ✅ **NÃO** — subnet privada, sem IP público |
+| Elasticsearch | 9200/9300 | elk-dev-sg | Sim | ELK-DEV, ELK-QAS | 🔴 **SIM** — subnet pública + IP público |
+| Kibana | 5601 | elk-dev-sg | Sim | ELK-DEV, ELK-QAS | 🔴 **SIM** — subnet pública + IP público |
+| Qdrant | 6333/6334 | Data-Qdrant-DEV-sg | Sim | Qdrant-DEV, QAS | ✅ **NÃO** — subnet privada, sem IP público |
+| SSH | 22 | MongoDB-QAS | Sim | — | ✅ **NÃO** — sem instâncias associadas |
+| SSH | 22 | MongoDB-DEV | Sim | MongoDB-DEV, HML, QAS | ✅ **NÃO** — subnet privada, sem IP público |
+| SSH | 22 | data-core-sg | Sim | DataCore-DEV, QAS | ✅ **NÃO** — subnet privada, sem IP público |
 
 ---
+
+## 5. Security Groups — Resumo por Função
+
+| SG | Nome | VPC | Função | Inbound 0.0.0.0/0 |
+|---|---|---|---|---|
+| `sg-075cfb93a8d50561c` | vpc-dev-env-sg-SSH | DEV | Bastion Host DEV | SSH 22 (IPs nominais) |
+| `sg-0640eb6c15c298dac` | vpc-prd-env-sg-SSH | PRD | Bastion Host PRD | SSH 22 (IPs nominais) |
+| `sg-0aa123eedbcdda956` | vpc-qas-env-sg-SSH | QAS | SSH QAS | SSH 22 (IPs nominais) |
+| `sg-041e650ab09e85aed` | SSH-dev-qas-hml-sg | DEV | SSH cross-env | SSH 22 (IPs nominais) |
+| `sg-0f803b6a968858ec2` | BastionHost-ssh-sg | HML | Bastion Host HML | SSH 22 (1 IP) |
+| `sg-0deb8d54d4fa83a5d` | vpc-dev-env-ContainerSG | DEV | ECS containers DEV/QAS/HML | **80, 443, 2000-3000, 3000-4002, 5000, 8000-8010** |
+| `sg-0478eeda4a1c972f9` | vpc-prd-env-ContainerSG | PRD | ECS containers PRD | 80, 443, 8000 |
+| `sg-00a58e0c886f395c3` | vpc-qasenv-ContainerSG | QAS | ECS containers QAS | 80, 443, 8000-8010 |
+| `sg-0ce3436be087b2399` | vpc-dev-env-IA-sg | DEV | IA services | **ALL (0.0.0.0/0)** 🔴 |
+| `sg-0596fe266ad78b6fa` | elk-dev-sg | DEV | ELK Stack | 5044, 5601, 9200, 9300, 9600 |
+| `sg-02acdc97646755fac` | grafana-sg | DEV | Grafana | 3000 (sem source), SSH restrito |
+| `sg-0408acb264b343a9f` | reto-backend-sg | DEV | Retopologia 3D | SSH (IPs), 5000-5002 |
+| `sg-00c7e62e13d3daac6` | MongoDB-DEV | DEV | MongoDB DEV/QAS/HML | **SSH, MongoDB 27017, Redis 6379** 🔴 |
+| `sg-0f1a4e2297117c71c` | MongoDB-PRD-sg | PRD | MongoDB PRD | SSH (restrito), **MongoDB 27017** 🔴 |
+| `sg-09e26cb9d3ccb0a67` | MongoDB-QAS | QAS | MongoDB QAS dedicado | **SSH, MongoDB 27017** 🔴 |
+| `sg-0ee49e95ec32f538e` | MongoDB-HML-sg | HML | MongoDB HML dedicado | SSH (1 IP), **MongoDB 27017** 🔴 |
+| `sg-0987cc39281bbba07` | data-core-sg | DEV | DataCore (PG) | **SSH 22, PostgreSQL 5432** 🔴 |
+| `sg-024d732ee103f71d5` | data-core-prd-sg | PRD | DataCore PRD | SSH (bastion), **PG, Redis, MongoDB** 🔴 |
+| `sg-03ada82413e7821b9` | data-core-dev-sg | DEV | DataCore DEV | SSH (bastion), **PG, Redis, MongoDB** 🔴 |
+| `sg-0d226a81517364312` | Data-Qdrant-DEV-sg | DEV | Qdrant Vector DB | SSH (bastion), **6333, 6334** |
+
 
 *Relatório gerado automaticamente a partir de dados coletados via AWS CLI em 10/04/2026 e revisado manualmente.*
